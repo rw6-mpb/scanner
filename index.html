@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>RW69 Live QR Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root{--gold:#c9a35b;--bg:#07121f}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Tahoma,"Noto Sans Thai",Arial,sans-serif;background:var(--bg);color:#fff;min-height:100vh}
+    .app{max-width:720px;margin:0 auto;padding:14px 14px 30px}
+    .head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+    .head h1{font-size:19px;margin:0}.sub{font-size:12px;opacity:.72;margin-top:4px}
+    .badge{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.09);font-size:12px}
+    .card{background:#fff;color:#172234;border-radius:20px;padding:12px;overflow:hidden}
+    #reader{width:100%;min-height:310px;border-radius:14px;overflow:hidden;background:#111}
+    #reader video{object-fit:cover}
+    .result{margin-top:12px;border-radius:16px;padding:16px;text-align:center;background:#162436;border:1px solid rgba(255,255,255,.12)}
+    .result h2{margin:0 0 6px;font-size:24px}.result .name{font-size:22px;font-weight:800;margin:7px 0}
+    .result.good{background:#09382c}.result.bad{background:#461b1b}.result.warn{background:#4b3610}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    button,.filebtn{flex:1;min-width:140px;border:0;border-radius:13px;padding:13px 15px;font:inherit;font-weight:700;cursor:pointer}
+    .primary{background:var(--gold);color:#172234}.light{background:#fff;color:#172234}
+    #fileInput{display:none}
+    .foot{text-align:center;opacity:.65;font-size:12px;line-height:1.6;margin-top:12px}
+    .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:#44d395;margin-right:6px;box-shadow:0 0 0 0 rgba(68,211,149,.7);animation:pulse 1.6s infinite}
+    @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(68,211,149,0)}100%{box-shadow:0 0 0 0 rgba(68,211,149,0)}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <div>
+      <h1>📷 RW69 Live Scanner</h1>
+      <div class="sub" id="adminInfo">กำลังเชื่อมต่อกับ Admin Portal...</div>
+    </div>
+    <div class="badge" id="connBadge">รอเชื่อมต่อ</div>
+  </div>
+  <div class="card"><div id="reader"></div></div>
+  <div class="result" id="resultBox"><h2>พร้อมสแกน</h2><div>หันกล้องไปที่ QR ของผู้ร่วมงาน</div></div>
+  <div class="controls">
+    <button class="primary" onclick="startScanner()">▶ เริ่ม/เปิดกล้องใหม่</button>
+    <button class="light" onclick="switchCamera()">🔄 สลับกล้อง</button>
+    <label class="filebtn light" for="fileInput">🖼️ เลือกรูป QR</label>
+    <input id="fileInput" type="file" accept="image/*" capture="environment">
+  </div>
+  <div class="foot">
+    เปิดหน้านี้จากปุ่ม <b>Live Scanner</b> ใน Admin Portal เพื่อผูกกับบัญชี Admin ที่กำลังใช้งาน<br>
+    กล้องสดต้องทำงานบน HTTPS
+  </div>
+</div>
+<script>
+let qr=null,cameras=[],cameraIndex=0,starting=false,busy=false,lastText='',lastAt=0,connected=false;
+const $=id=>document.getElementById(id);
+
+function notifyReady(){
+  if(window.opener && !window.opener.closed){
+    window.opener.postMessage({type:'RW69_SCANNER_READY'},'*');
+  }else{
+    setConnection(false,'ไม่พบ Admin Portal');
+  }
+}
+function setConnection(ok,text){
+  connected=ok;
+  $('connBadge').innerHTML=ok?'<span class="pulse"></span>เชื่อมต่อแล้ว':'ยังไม่เชื่อมต่อ';
+  $('adminInfo').textContent=text||'';
+}
+window.addEventListener('message',ev=>{
+  const d=ev.data||{};
+  if(d.type==='RW69_ADMIN_HELLO'){
+    setConnection(true,(d.adminName||'Admin')+(d.adminId?' · '+d.adminId:''));
+  }
+  if(d.type==='RW69_CHECKIN_RESULT'){
+    busy=false;
+    const r=d.result||{};
+    if(r.success){
+      showResult('good','✅ CHECK-IN สำเร็จ',r.displayName||'',(r.department||'')+' · รวม '+(r.totalPeople||1)+' คน');
+      beep(880,0.10);
+    }else if(r.duplicate){
+      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.checkInAt||'')+(r.checkedInBy?' · '+r.checkedInBy:''));
+      beep(520,0.13);
+    }else{
+      showResult('bad','❌ ไม่สำเร็จ','',r.error||'ไม่พบข้อมูล');
+      beep(240,0.18);
+    }
+    setTimeout(()=>showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป'),1800);
+  }
+});
+
+function showResult(cls,title,name,detail){
+  const b=$('resultBox');
+  b.className='result'+(cls?' '+cls:'');
+  b.innerHTML='<h2>'+esc(title)+'</h2>'+(name?'<div class="name">'+esc(name)+'</div>':'')+'<div>'+esc(detail||'')+'</div>';
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+
+async function startScanner(){
+  if(starting)return;
+  starting=true;
+  try{
+    if(!connected)notifyReady();
+    if(qr){
+      try{await qr.stop()}catch(_){}
+      try{qr.clear()}catch(_){}
+    }
+    qr=new Html5Qrcode('reader');
+    cameras=await Html5Qrcode.getCameras();
+    if(!cameras.length)throw new Error('ไม่พบกล้อง');
+    if(cameraIndex>=cameras.length)cameraIndex=0;
+    let cameraConfig={facingMode:'environment'};
+    if(cameras.length>1 && cameras[cameraIndex] && cameras[cameraIndex].id) cameraConfig=cameras[cameraIndex].id;
+    await qr.start(
+      cameraConfig,
+      {fps:12,qrbox:(vw,vh)=>{const s=Math.floor(Math.min(vw,vh)*0.72);return {width:s,height:s}},aspectRatio:1.0},
+      decoded=>submitScan(decoded),
+      ()=>{}
+    );
+    showResult('','พร้อมสแกน','','หันกล้องไปที่ QR ของผู้ร่วมงาน');
+  }catch(e){
+    showResult('bad','เปิดกล้องไม่ได้','',e&&e.message?e.message:String(e));
+  }finally{
+    starting=false;
+  }
+}
+
+async function switchCamera(){
+  if(!cameras.length){
+    try{cameras=await Html5Qrcode.getCameras()}catch(_){}
+  }
+  if(cameras.length>1)cameraIndex=(cameraIndex+1)%cameras.length;
+  startScanner();
+}
+
+function submitScan(text){
+  const now=Date.now();
+  if(busy)return;
+  if(text===lastText && now-lastAt<3500)return;
+  lastText=text;lastAt=now;
+  if(!window.opener || window.opener.closed){
+    showResult('bad','ขาดการเชื่อมต่อ','','กรุณากลับไป Admin Portal แล้วกด Live Scanner ใหม่');
+    setConnection(false,'ไม่พบ Admin Portal');
+    return;
+  }
+  busy=true;
+  showResult('','กำลังตรวจสอบ...','','');
+  window.opener.postMessage({type:'RW69_QR_SCAN',text:String(text)},'*');
+  setTimeout(()=>{if(busy){busy=false;showResult('bad','ไม่ได้รับการตอบกลับ','','ตรวจว่า Admin Portal ยังเปิดอยู่ แล้วลองใหม่')}},8000);
+}
+
+$('fileInput').addEventListener('change',async e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f)return;
+  let temp=null;
+  try{
+    temp=new Html5Qrcode('reader');
+    const text=await temp.scanFile(f,true);
+    submitScan(text);
+  }catch(ex){
+    showResult('bad','อ่าน QR ไม่สำเร็จ','','ถ่ายให้ QR ชัดและเต็มกรอบแล้วลองใหม่');
+  }finally{
+    try{if(temp)await temp.clear()}catch(_){}
+    e.target.value='';
+  }
+});
+
+function beep(freq,dur){
+  try{
+    const C=window.AudioContext||window.webkitAudioContext,a=new C(),o=a.createOscillator(),g=a.createGain();
+    o.frequency.value=freq;o.connect(g);g.connect(a.destination);g.gain.value=.06;o.start();o.stop(a.currentTime+dur);
+  }catch(_){}
+}
+window.addEventListener('load',()=>{notifyReady();setTimeout(notifyReady,600);setTimeout(startScanner,350)});
+window.addEventListener('beforeunload',()=>{try{if(qr)qr.stop()}catch(_){}});
+</script>
+</body>
+</html>
