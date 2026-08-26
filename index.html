@@ -90,7 +90,7 @@ function jsonp(action,data){
 async function ping(){
   if(!pair||!api){
     setConnection(false,'กรุณากลับไป Admin Portal แล้วกด Live Scanner ใหม่');
-    showResult('bad','ขาดข้อมูลเชื่อมต่อ','','หน้านี้ต้องเปิดจาก Admin Portal');
+    showResult('bad','ขาดข้อมูลเชื่อมต่อ','','กรุณาปิดหน้านี้ แล้วกด Live Scanner จาก Admin Portal ใหม่');
     return false;
   }
   try{
