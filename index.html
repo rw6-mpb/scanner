@@ -24,8 +24,7 @@
     .primary{background:var(--gold);color:#172234}.light{background:#fff;color:#172234}
     #fileInput{display:none}
     .foot{text-align:center;opacity:.65;font-size:12px;line-height:1.6;margin-top:12px}
-    .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:#44d395;margin-right:6px;box-shadow:0 0 0 0 rgba(68,211,149,.7);animation:pulse 1.6s infinite}
-    @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(68,211,149,0)}100%{box-shadow:0 0 0 0 rgba(68,211,149,0)}}
+    .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:#44d395;margin-right:6px}
   </style>
 </head>
 <body>
@@ -33,12 +32,12 @@
   <div class="head">
     <div>
       <h1>📷 RW69 Live Scanner</h1>
-      <div class="sub" id="adminInfo">กำลังเชื่อมต่อกับ Admin Portal...</div>
+      <div class="sub" id="adminInfo">กำลังตรวจสอบการเชื่อมต่อ...</div>
     </div>
-    <div class="badge" id="connBadge">รอเชื่อมต่อ</div>
+    <div class="badge" id="connBadge">กำลังเชื่อมต่อ</div>
   </div>
   <div class="card"><div id="reader"></div></div>
-  <div class="result" id="resultBox"><h2>พร้อมสแกน</h2><div>หันกล้องไปที่ QR ของผู้ร่วมงาน</div></div>
+  <div class="result" id="resultBox"><h2>กำลังเตรียม Scanner</h2><div>กรุณารอสักครู่</div></div>
   <div class="controls">
     <button class="primary" onclick="startScanner()">▶ เริ่ม/เปิดกล้องใหม่</button>
     <button class="light" onclick="switchCamera()">🔄 สลับกล้อง</button>
@@ -46,48 +45,23 @@
     <input id="fileInput" type="file" accept="image/*" capture="environment">
   </div>
   <div class="foot">
-    เปิดหน้านี้จากปุ่ม <b>Live Scanner</b> ใน Admin Portal เพื่อผูกกับบัญชี Admin ที่กำลังใช้งาน<br>
-    กล้องสดต้องทำงานบน HTTPS
+    Scanner นี้ต้องเปิดจากปุ่ม <b>Live Scanner</b> ใน Admin Portal<br>
+    การเชื่อมต่อมีอายุประมาณ 1 ชั่วโมง
   </div>
 </div>
 <script>
+const params=new URLSearchParams(location.search);
+const pair=params.get('pair')||'';
+const api=params.get('api')||'';
+const adminParam=params.get('admin')||'';
 let qr=null,cameras=[],cameraIndex=0,starting=false,busy=false,lastText='',lastAt=0,connected=false;
 const $=id=>document.getElementById(id);
 
-function notifyReady(){
-  if(window.opener && !window.opener.closed){
-    window.opener.postMessage({type:'RW69_SCANNER_READY'},'*');
-  }else{
-    setConnection(false,'ไม่พบ Admin Portal');
-  }
-}
 function setConnection(ok,text){
   connected=ok;
   $('connBadge').innerHTML=ok?'<span class="pulse"></span>เชื่อมต่อแล้ว':'ยังไม่เชื่อมต่อ';
   $('adminInfo').textContent=text||'';
 }
-window.addEventListener('message',ev=>{
-  const d=ev.data||{};
-  if(d.type==='RW69_ADMIN_HELLO'){
-    setConnection(true,(d.adminName||'Admin')+(d.adminId?' · '+d.adminId:''));
-  }
-  if(d.type==='RW69_CHECKIN_RESULT'){
-    busy=false;
-    const r=d.result||{};
-    if(r.success){
-      showResult('good','✅ CHECK-IN สำเร็จ',r.displayName||'',(r.department||'')+' · รวม '+(r.totalPeople||1)+' คน');
-      beep(880,0.10);
-    }else if(r.duplicate){
-      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.checkInAt||'')+(r.checkedInBy?' · '+r.checkedInBy:''));
-      beep(520,0.13);
-    }else{
-      showResult('bad','❌ ไม่สำเร็จ','',r.error||'ไม่พบข้อมูล');
-      beep(240,0.18);
-    }
-    setTimeout(()=>showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป'),1800);
-  }
-});
-
 function showResult(cls,title,name,detail){
   const b=$('resultBox');
   b.className='result'+(cls?' '+cls:'');
@@ -95,11 +69,50 @@ function showResult(cls,title,name,detail){
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 
+function jsonp(action,data){
+  return new Promise((resolve,reject)=>{
+    if(!api){reject(new Error('ไม่พบ Web App URL'));return;}
+    const cb='rw69cb_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+    let done=false;
+    const script=document.createElement('script');
+    const cleanup=()=>{try{delete window[cb]}catch(_){window[cb]=undefined} script.remove()};
+    const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('ไม่ได้รับการตอบกลับจากระบบ'))},10000);
+    window[cb]=payload=>{
+      if(done)return;done=true;clearTimeout(timer);cleanup();resolve(payload||{});
+    };
+    const q=new URLSearchParams({scannerApi:'1',action,callback:cb,pair,...data});
+    script.src=api+(api.includes('?')?'&':'?')+q.toString();
+    script.onerror=()=>{if(done)return;done=true;clearTimeout(timer);cleanup();reject(new Error('เชื่อมต่อ Apps Script ไม่สำเร็จ'))};
+    document.head.appendChild(script);
+  });
+}
+
+async function ping(){
+  if(!pair||!api){
+    setConnection(false,'กรุณากลับไป Admin Portal แล้วกด Live Scanner ใหม่');
+    showResult('bad','ขาดข้อมูลเชื่อมต่อ','','หน้านี้ต้องเปิดจาก Admin Portal');
+    return false;
+  }
+  try{
+    const r=await jsonp('ping',{});
+    if(!r.success)throw new Error(r.error||'เชื่อมต่อไม่สำเร็จ');
+    setConnection(true,(r.displayName||adminParam||'Admin')+(r.adminId?' · '+r.adminId:''));
+    return true;
+  }catch(e){
+    setConnection(false,e.message||String(e));
+    showResult('bad','ขาดการเชื่อมต่อ','',e.message||String(e));
+    return false;
+  }
+}
+
 async function startScanner(){
   if(starting)return;
   starting=true;
   try{
-    if(!connected)notifyReady();
+    if(!connected){
+      const ok=await ping();
+      if(!ok)return;
+    }
     if(qr){
       try{await qr.stop()}catch(_){}
       try{qr.clear()}catch(_){}
@@ -109,67 +122,63 @@ async function startScanner(){
     if(!cameras.length)throw new Error('ไม่พบกล้อง');
     if(cameraIndex>=cameras.length)cameraIndex=0;
     let cameraConfig={facingMode:'environment'};
-    if(cameras.length>1 && cameras[cameraIndex] && cameras[cameraIndex].id) cameraConfig=cameras[cameraIndex].id;
-    await qr.start(
-      cameraConfig,
-      {fps:12,qrbox:(vw,vh)=>{const s=Math.floor(Math.min(vw,vh)*0.72);return {width:s,height:s}},aspectRatio:1.0},
-      decoded=>submitScan(decoded),
-      ()=>{}
-    );
+    if(cameras.length>1&&cameras[cameraIndex]&&cameras[cameraIndex].id)cameraConfig=cameras[cameraIndex].id;
+    await qr.start(cameraConfig,{fps:12,qrbox:(vw,vh)=>{const s=Math.floor(Math.min(vw,vh)*.72);return{width:s,height:s}},aspectRatio:1},decoded=>submitScan(decoded),()=>{});
     showResult('','พร้อมสแกน','','หันกล้องไปที่ QR ของผู้ร่วมงาน');
   }catch(e){
     showResult('bad','เปิดกล้องไม่ได้','',e&&e.message?e.message:String(e));
-  }finally{
-    starting=false;
-  }
+  }finally{starting=false}
 }
 
 async function switchCamera(){
-  if(!cameras.length){
-    try{cameras=await Html5Qrcode.getCameras()}catch(_){}
-  }
+  if(!cameras.length){try{cameras=await Html5Qrcode.getCameras()}catch(_){}}
   if(cameras.length>1)cameraIndex=(cameraIndex+1)%cameras.length;
   startScanner();
 }
 
-function submitScan(text){
+async function submitScan(text){
   const now=Date.now();
   if(busy)return;
-  if(text===lastText && now-lastAt<3500)return;
-  lastText=text;lastAt=now;
-  if(!window.opener || window.opener.closed){
-    showResult('bad','ขาดการเชื่อมต่อ','','กรุณากลับไป Admin Portal แล้วกด Live Scanner ใหม่');
-    setConnection(false,'ไม่พบ Admin Portal');
-    return;
-  }
-  busy=true;
+  if(text===lastText&&now-lastAt<3500)return;
+  lastText=text;lastAt=now;busy=true;
   showResult('','กำลังตรวจสอบ...','','');
-  window.opener.postMessage({type:'RW69_QR_SCAN',text:String(text)},'*');
-  setTimeout(()=>{if(busy){busy=false;showResult('bad','ไม่ได้รับการตอบกลับ','','ตรวจว่า Admin Portal ยังเปิดอยู่ แล้วลองใหม่')}},8000);
+  try{
+    const r=await jsonp('checkin',{qr:String(text)});
+    if(r.success){
+      showResult('good','✅ CHECK-IN สำเร็จ',r.displayName||'',(r.department||'')+' · รวม '+(r.totalPeople||1)+' คน');
+      beep(880,.10);
+    }else if(r.duplicate){
+      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.checkInAt||'')+(r.checkedInBy?' · '+r.checkedInBy:''));
+      beep(520,.13);
+    }else{
+      showResult('bad','❌ ไม่สำเร็จ','',r.error||'ไม่พบข้อมูล');
+      beep(240,.18);
+      if((r.error||'').includes('หมดอายุ'))setConnection(false,'การเชื่อมต่อหมดอายุ');
+    }
+  }catch(e){
+    showResult('bad','❌ เชื่อมต่อไม่สำเร็จ','',e.message||String(e));
+    beep(240,.18);
+  }finally{
+    setTimeout(()=>{busy=false;if(connected)showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป')},1800);
+  }
 }
 
 $('fileInput').addEventListener('change',async e=>{
-  const f=e.target.files&&e.target.files[0]; if(!f)return;
+  const f=e.target.files&&e.target.files[0];if(!f)return;
   let temp=null;
   try{
     temp=new Html5Qrcode('reader');
     const text=await temp.scanFile(f,true);
     submitScan(text);
-  }catch(ex){
-    showResult('bad','อ่าน QR ไม่สำเร็จ','','ถ่ายให้ QR ชัดและเต็มกรอบแล้วลองใหม่');
-  }finally{
-    try{if(temp)await temp.clear()}catch(_){}
-    e.target.value='';
-  }
+  }catch(ex){showResult('bad','อ่าน QR ไม่สำเร็จ','','ถ่ายให้ QR ชัดและเต็มกรอบแล้วลองใหม่')}
+  finally{try{if(temp)await temp.clear()}catch(_){} e.target.value=''}
 });
 
 function beep(freq,dur){
-  try{
-    const C=window.AudioContext||window.webkitAudioContext,a=new C(),o=a.createOscillator(),g=a.createGain();
-    o.frequency.value=freq;o.connect(g);g.connect(a.destination);g.gain.value=.06;o.start();o.stop(a.currentTime+dur);
-  }catch(_){}
+  try{const C=window.AudioContext||window.webkitAudioContext,a=new C(),o=a.createOscillator(),g=a.createGain();o.frequency.value=freq;o.connect(g);g.connect(a.destination);g.gain.value=.06;o.start();o.stop(a.currentTime+dur)}catch(_){}
 }
-window.addEventListener('load',()=>{notifyReady();setTimeout(notifyReady,600);setTimeout(startScanner,350)});
+
+window.addEventListener('load',async()=>{const ok=await ping();if(ok)setTimeout(startScanner,250)});
 window.addEventListener('beforeunload',()=>{try{if(qr)qr.stop()}catch(_){}});
 </script>
 </body>
