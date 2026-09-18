@@ -6,7 +6,7 @@
   <title>RW69 Live QR Scanner</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    :root{--gold:#e2bf57;--bg:#f6f8fb;--navy:#0d2b55;--line:#e1e7ee}
+    :root{--gold:#e2bf57;--bg:#f6f8fb;--navy:#0d2b55;--line:#e1e7ee;--green:#16764e}
     *{box-sizing:border-box}
     body{margin:0;font-family:Tahoma,"Noto Sans Thai",Arial,sans-serif;background:linear-gradient(180deg,#fff,#f6f8fb);color:var(--navy);min-height:100vh}
     .app{max-width:720px;margin:0 auto;padding:14px 14px 30px}
@@ -19,12 +19,20 @@
     .result{margin-top:12px;border-radius:16px;padding:16px;text-align:center;background:#fff;border:1px solid var(--line);box-shadow:0 8px 22px rgba(20,45,75,.05)}
     .result h2{margin:0 0 6px;font-size:24px}.result .name{font-size:22px;font-weight:800;margin:7px 0}
     .result.good{background:#e8f8ef;border-color:#bfe7d1;color:#126e48}.result.bad{background:#fff0f0;border-color:#f0caca;color:#9e3434}.result.warn{background:#fff7df;border-color:#ead79f;color:#7a6020}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .post{display:none;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:0 8px 22px rgba(20,45,75,.05)}
+    .post.show{display:block}.postSummary{font-size:13px;color:#5e6e82;line-height:1.55;margin-bottom:10px}
+    .editPanel{display:none;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 8px 22px rgba(20,45,75,.05)}
+    .editPanel.show{display:block}.editTitle{font-weight:800;font-size:17px;margin-bottom:10px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field label{display:block;font-size:12px;color:#617087;margin-bottom:5px}
+    .field input,.field select{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:11px;background:#fff;color:#172234;font:inherit}
+    .hint{font-size:11px;color:#7f8a99;line-height:1.45;margin-top:7px}
+    .controls,.postBtns,.editBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
     button,.filebtn{flex:1;min-width:140px;border:0;border-radius:13px;padding:13px 15px;font:inherit;font-weight:700;cursor:pointer}
-    .primary{background:var(--gold);color:#4c3b0e}.light{background:#fff;color:#172234;border:1px solid var(--line)}
+    .primary{background:var(--gold);color:#4c3b0e}.success{background:#1d7f57;color:#fff}.light{background:#fff;color:#172234;border:1px solid var(--line)}
     #fileInput{display:none}
     .foot{text-align:center;color:#7c8999;font-size:12px;line-height:1.6;margin-top:12px}
     .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:#44d395;margin-right:6px}
+    @media(max-width:560px){.grid{grid-template-columns:1fr}.head{align-items:flex-start}.badge{white-space:nowrap}}
   </style>
 </head>
 <body>
@@ -36,25 +44,61 @@
     </div>
     <div class="badge" id="connBadge">กำลังเชื่อมต่อ</div>
   </div>
+
   <div class="card"><div id="reader"></div></div>
-  <div class="result" id="resultBox"><h2>กำลังเตรียม Scanner</h2><div>กรุณารอสักครู่</div></div>
+
+  <div class="result" id="resultBox">
+    <h2>กำลังเตรียม Scanner</h2>
+    <div>กรุณารอสักครู่</div>
+  </div>
+
+  <div class="post" id="postActions">
+    <div class="postSummary" id="postSummary"></div>
+    <div class="postBtns">
+      <button class="primary" onclick="openEditPanel()">✏️ แก้จำนวน / โต๊ะ</button>
+      <button class="light" onclick="clearPostActions()">สแกนคนถัดไป</button>
+    </div>
+  </div>
+
+  <div class="editPanel" id="editPanel">
+    <div class="editTitle">แก้ข้อมูลผู้เข้าร่วมหลัง Check-in</div>
+    <div class="grid">
+      <div class="field">
+        <label>จำนวนผู้มาจริง (รวมเจ้าหน้าที่)</label>
+        <input id="actualPeopleInput" type="number" inputmode="numeric" min="1" max="20" value="1">
+      </div>
+      <div class="field">
+        <label>โต๊ะ</label>
+        <select id="tableSelect"><option value="">จัดอัตโนมัติใหม่</option></select>
+      </div>
+    </div>
+    <div class="hint" id="editHint">ถ้าจำนวนตรงตามที่ลงทะเบียน ไม่ต้องแก้ ระบบจัดโต๊ะประจำฝ่ายให้อัตโนมัติ</div>
+    <div class="editBtns">
+      <button class="success" id="saveEditBtn" onclick="saveAttendanceSeating()">💾 บันทึกการแก้ไข</button>
+      <button class="light" onclick="closeEditPanel()">ยกเลิก</button>
+    </div>
+  </div>
+
   <div class="controls">
     <button class="primary" onclick="startScanner()">▶ เริ่ม/เปิดกล้องใหม่</button>
     <button class="light" onclick="switchCamera()">🔄 สลับกล้อง</button>
     <label class="filebtn light" for="fileInput">🖼️ เลือกรูป QR</label>
     <input id="fileInput" type="file" accept="image/*" capture="environment">
   </div>
+
   <div class="foot">
     Scanner นี้ต้องเปิดจากปุ่ม <b>Live Scanner</b> ใน Admin Portal<br>
     การเชื่อมต่อมีอายุประมาณ 1 ชั่วโมง
   </div>
 </div>
+
 <script>
 const params=new URLSearchParams(location.search);
 const pair=params.get('pair')||'';
 const api=params.get('api')||'';
 const adminParam=params.get('admin')||'';
 let qr=null,cameras=[],cameraIndex=0,starting=false,busy=false,lastText='',lastAt=0,connected=false;
+let lastCheckin=null,seatingTables=[];
 const $=id=>document.getElementById(id);
 
 function setConnection(ok,text){
@@ -124,6 +168,7 @@ async function startScanner(){
     let cameraConfig={facingMode:'environment'};
     if(cameras.length>1&&cameras[cameraIndex]&&cameras[cameraIndex].id)cameraConfig=cameras[cameraIndex].id;
     await qr.start(cameraConfig,{fps:12,qrbox:(vw,vh)=>{const s=Math.floor(Math.min(vw,vh)*.72);return{width:s,height:s}},aspectRatio:1},decoded=>submitScan(decoded),()=>{});
+    clearPostActions();
     showResult('','พร้อมสแกน','','หันกล้องไปที่ QR ของผู้ร่วมงาน');
   }catch(e){
     showResult('bad','เปิดกล้องไม่ได้','',e&&e.message?e.message:String(e));
@@ -136,22 +181,140 @@ async function switchCamera(){
   startScanner();
 }
 
+function setLastCheckin(r){
+  lastCheckin={
+    registrationId:String(r.registrationId||''),
+    displayName:String(r.displayName||''),
+    department:String(r.department||''),
+    actualPeople:Number(r.actualPeople||r.totalPeople||1),
+    seatLabel:String(r.seatLabel||''),
+    tableIds:Array.isArray(r.tableIds)?r.tableIds.map(String):[]
+  };
+}
+
+function showPostActions(r,warning){
+  setLastCheckin(r);
+  const detail=(lastCheckin.department||'-')+' · '+(lastCheckin.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+lastCheckin.actualPeople+' คน';
+  $('postSummary').textContent=detail+(warning?' · '+warning:'');
+  $('postActions').classList.add('show');
+  $('editPanel').classList.remove('show');
+}
+
+function clearPostActions(){
+  $('postActions').classList.remove('show');
+  $('editPanel').classList.remove('show');
+  lastCheckin=null;
+}
+
+async function openEditPanel(){
+  if(!lastCheckin||!lastCheckin.registrationId)return;
+  $('actualPeopleInput').value=String(Math.max(1,Math.min(20,lastCheckin.actualPeople||1)));
+  $('editHint').textContent='กำลังโหลดโต๊ะ...';
+  $('editPanel').classList.add('show');
+  try{
+    const r=await jsonp('seating',{});
+    if(!r.success)throw new Error(r.error||'โหลดข้อมูลโต๊ะไม่สำเร็จ');
+    seatingTables=Array.isArray(r.tables)?r.tables:[];
+    buildTableOptions();
+    $('editHint').textContent='แนะนำ: ถ้าแก้เฉพาะจำนวน ให้คงโต๊ะเดิมไว้ได้ ถ้าเลือก “จัดอัตโนมัติใหม่” ระบบจะใช้โต๊ะประจำฝ่ายก่อน แล้วค่อย Overflow 24–25';
+  }catch(e){
+    $('editHint').textContent=e.message||String(e);
+  }
+}
+
+function buildTableOptions(){
+  const sel=$('tableSelect');
+  sel.innerHTML='<option value="">จัดอัตโนมัติใหม่ (ตามฝ่าย)</option>';
+  if(!lastCheckin)return;
+  const isVip=lastCheckin.tableIds.some(id=>String(id).indexOf('VIP')===0);
+  const type=isVip?'VIP':'GENERAL';
+  const current=(lastCheckin.tableIds.length===1)?String(lastCheckin.tableIds[0]):'';
+
+  const own=[],overflow=[],other=[];
+  seatingTables.filter(t=>String(t.type)===type).forEach(t=>{
+    const owner=String(t.ownerDepartment||'');
+    if(type==='VIP') own.push(t);
+    else if(owner===lastCheckin.department) own.push(t);
+    else if(owner==='Overflow') overflow.push(t);
+    else other.push(t);
+  });
+
+  function addGroup(label,list){
+    if(!list.length)return;
+    const g=document.createElement('optgroup');
+    g.label=label;
+    list.forEach(t=>{
+      const o=document.createElement('option');
+      o.value=String(t.id);
+      const owner=String(t.ownerDepartment||'');
+      o.textContent='โต๊ะ '+t.label+' · '+(owner||'-')+' · '+Number(t.occupied||0)+'/8';
+      g.appendChild(o);
+    });
+    sel.appendChild(g);
+  }
+
+  addGroup(type==='VIP'?'โต๊ะ VIP':'โต๊ะประจำฝ่าย '+lastCheckin.department,own);
+  if(type!=='VIP'){
+    addGroup('Overflow 24–25',overflow);
+    addGroup('โต๊ะฝ่ายอื่น (Override โดย Admin)',other);
+  }
+  if(current && Array.from(sel.options).some(o=>o.value===current)) sel.value=current;
+  else sel.value='';
+}
+
+function closeEditPanel(){
+  $('editPanel').classList.remove('show');
+}
+
+async function saveAttendanceSeating(){
+  if(!lastCheckin||!lastCheckin.registrationId)return;
+  const people=Math.max(1,Math.min(20,parseInt($('actualPeopleInput').value||'1',10)||1));
+  const tableId=String($('tableSelect').value||'');
+  const btn=$('saveEditBtn');
+  btn.disabled=true;btn.textContent='กำลังบันทึก...';
+  try{
+    const r=await jsonp('seatingUpdate',{
+      registrationId:lastCheckin.registrationId,
+      actualPeople:String(people),
+      preferredTableId:tableId
+    });
+    if(!r.success)throw new Error(r.error||'บันทึกไม่สำเร็จ');
+    setLastCheckin(r);
+    showResult('good','✅ แก้ไขเรียบร้อย',r.displayName||lastCheckin.displayName,(r.department||lastCheckin.department)+' · '+(r.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+(r.actualPeople||people)+' คน');
+    $('postSummary').textContent=(r.department||lastCheckin.department)+' · '+(r.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+(r.actualPeople||people)+' คน'+(r.warning?' · '+r.warning:'');
+    $('postActions').classList.add('show');
+    $('editPanel').classList.remove('show');
+    beep(880,.10);
+  }catch(e){
+    showResult('bad','❌ แก้ไขไม่สำเร็จ','',e.message||String(e));
+    beep(240,.18);
+  }finally{
+    btn.disabled=false;btn.textContent='💾 บันทึกการแก้ไข';
+  }
+}
+
 async function submitScan(text){
   const now=Date.now();
   const perfStart=(window.performance&&performance.now)?performance.now():Date.now();
   if(busy)return;
   if(text===lastText&&now-lastAt<3500)return;
   lastText=text;lastAt=now;busy=true;
+  clearPostActions();
   showResult('','กำลังตรวจสอบ...','','');
+  let keepResult=false;
   try{
     const r=await jsonp('checkin',{qr:String(text)});
     if(r.success){
       const elapsed=(((window.performance&&performance.now)?performance.now():Date.now())-perfStart)/1000;
       showResult('good','✅ CHECK-IN สำเร็จ',r.displayName||'',(r.department||'')+' · '+(r.seatLabel||'')+' · '+(r.actualPeople||r.totalPeople||1)+' คน · '+elapsed.toFixed(1)+' วิ');
+      showPostActions(r,r.seatWarning||'');
       beep(880,.10);
+      keepResult=true;
     }else if(r.duplicate){
-      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.seatLabel?r.seatLabel+' · ':'')+(r.checkInAt||'')+(r.checkedInBy?' · '+r.checkedInBy:''));
+      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.department||'')+' · '+(r.seatLabel||'')+' · '+(r.actualPeople||r.totalPeople||1)+' คน');
+      showPostActions(r,'สามารถแก้จำนวนผู้มาจริงหรือโต๊ะได้');
       beep(520,.13);
+      keepResult=true;
     }else{
       showResult('bad','❌ ไม่สำเร็จ','',r.error||'ไม่พบข้อมูล');
       beep(240,.18);
@@ -161,7 +324,11 @@ async function submitScan(text){
     showResult('bad','❌ เชื่อมต่อไม่สำเร็จ','',e.message||String(e));
     beep(240,.18);
   }finally{
-    setTimeout(()=>{busy=false;if(connected)showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป')},900);
+    if(keepResult){
+      setTimeout(()=>{busy=false},900);
+    }else{
+      setTimeout(()=>{busy=false;if(connected)showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป')},1800);
+    }
   }
 }
 
