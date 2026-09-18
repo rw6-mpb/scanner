@@ -19,14 +19,16 @@
     .result{margin-top:12px;border-radius:16px;padding:16px;text-align:center;background:#fff;border:1px solid var(--line);box-shadow:0 8px 22px rgba(20,45,75,.05)}
     .result h2{margin:0 0 6px;font-size:24px}.result .name{font-size:22px;font-weight:800;margin:7px 0}
     .result.good{background:#e8f8ef;border-color:#bfe7d1;color:#126e48}.result.bad{background:#fff0f0;border-color:#f0caca;color:#9e3434}.result.warn{background:#fff7df;border-color:#ead79f;color:#7a6020}
-    .post{display:none;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:0 8px 22px rgba(20,45,75,.05)}
-    .post.show{display:block}.postSummary{font-size:13px;color:#5e6e82;line-height:1.55;margin-bottom:10px}
-    .editPanel{display:none;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 8px 22px rgba(20,45,75,.05)}
-    .editPanel.show{display:block}.editTitle{font-weight:800;font-size:17px;margin-bottom:10px}
+    .modalBack{position:fixed;inset:0;z-index:100;display:none;align-items:flex-end;justify-content:center;background:rgba(13,43,85,.30);backdrop-filter:blur(2px);padding:12px}
+    .modalBack.show{display:flex}
+    .modalSheet{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:22px 22px 16px 16px;padding:18px;box-shadow:0 -12px 40px rgba(20,45,75,.18)}
+    .modalStatus{font-size:13px;font-weight:800;color:var(--green);margin-bottom:5px}.modalStatus.warn{color:#8a6814}
+    .modalName{font-size:24px;font-weight:900;color:var(--navy);line-height:1.25}.modalSummary{font-size:14px;color:#5e6e82;line-height:1.65;margin-top:7px}
+    .modalTitle{font-weight:900;font-size:18px;color:var(--navy);margin-bottom:12px}.modalView.hidden{display:none}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field label{display:block;font-size:12px;color:#617087;margin-bottom:5px}
     .field input,.field select{width:100%;padding:12px;border:1px solid #ccd5df;border-radius:11px;background:#fff;color:#172234;font:inherit}
     .hint{font-size:11px;color:#7f8a99;line-height:1.45;margin-top:7px}
-    .controls,.postBtns,.editBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .controls,.modalBtns,.editBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
     button,.filebtn{flex:1;min-width:140px;border:0;border-radius:13px;padding:13px 15px;font:inherit;font-weight:700;cursor:pointer}
     .primary{background:var(--gold);color:#4c3b0e}.success{background:#1d7f57;color:#fff}.light{background:#fff;color:#172234;border:1px solid var(--line)}
     #fileInput{display:none}
@@ -52,30 +54,36 @@
     <div>กรุณารอสักครู่</div>
   </div>
 
-  <div class="post" id="postActions">
-    <div class="postSummary" id="postSummary"></div>
-    <div class="postBtns">
-      <button class="primary" onclick="openEditPanel()">✏️ แก้จำนวน / โต๊ะ</button>
-      <button class="light" onclick="clearPostActions()">สแกนคนถัดไป</button>
-    </div>
-  </div>
+  <div class="modalBack" id="scanModal">
+    <div class="modalSheet">
+      <div class="modalView" id="modalSummaryView">
+        <div class="modalStatus" id="modalStatus">✅ CHECK-IN สำเร็จ</div>
+        <div class="modalName" id="modalName">—</div>
+        <div class="modalSummary" id="modalSummary">—</div>
+        <div class="modalBtns">
+          <button class="primary" onclick="openEditPanel()">✏️ แก้จำนวน / โต๊ะ</button>
+          <button class="success" onclick="finishScanModal()">✓ สแกนคนถัดไป</button>
+        </div>
+      </div>
 
-  <div class="editPanel" id="editPanel">
-    <div class="editTitle">แก้ข้อมูลผู้เข้าร่วมหลัง Check-in</div>
-    <div class="grid">
-      <div class="field">
-        <label>จำนวนผู้มาจริง (รวมเจ้าหน้าที่)</label>
-        <input id="actualPeopleInput" type="number" inputmode="numeric" min="1" max="20" value="1">
+      <div class="modalView hidden" id="modalEditView">
+        <div class="modalTitle">แก้จำนวนผู้มาจริง / โต๊ะ</div>
+        <div class="grid">
+          <div class="field">
+            <label>จำนวนผู้มาจริง (รวมเจ้าหน้าที่)</label>
+            <input id="actualPeopleInput" type="number" inputmode="numeric" min="1" max="20" value="1">
+          </div>
+          <div class="field">
+            <label>โต๊ะ</label>
+            <select id="tableSelect"><option value="">จัดอัตโนมัติใหม่</option></select>
+          </div>
+        </div>
+        <div class="hint" id="editHint">ถ้าจำนวนตรงตามที่ลงทะเบียน ไม่ต้องแก้ ระบบจัดโต๊ะประจำฝ่ายให้อัตโนมัติ</div>
+        <div class="editBtns">
+          <button class="success" id="saveEditBtn" onclick="saveAttendanceSeating()">💾 บันทึก</button>
+          <button class="light" onclick="closeEditPanel()">← กลับ</button>
+        </div>
       </div>
-      <div class="field">
-        <label>โต๊ะ</label>
-        <select id="tableSelect"><option value="">จัดอัตโนมัติใหม่</option></select>
-      </div>
-    </div>
-    <div class="hint" id="editHint">ถ้าจำนวนตรงตามที่ลงทะเบียน ไม่ต้องแก้ ระบบจัดโต๊ะประจำฝ่ายให้อัตโนมัติ</div>
-    <div class="editBtns">
-      <button class="success" id="saveEditBtn" onclick="saveAttendanceSeating()">💾 บันทึกการแก้ไข</button>
-      <button class="light" onclick="closeEditPanel()">ยกเลิก</button>
     </div>
   </div>
 
@@ -168,7 +176,7 @@ async function startScanner(){
     let cameraConfig={facingMode:'environment'};
     if(cameras.length>1&&cameras[cameraIndex]&&cameras[cameraIndex].id)cameraConfig=cameras[cameraIndex].id;
     await qr.start(cameraConfig,{fps:12,qrbox:(vw,vh)=>{const s=Math.floor(Math.min(vw,vh)*.72);return{width:s,height:s}},aspectRatio:1},decoded=>submitScan(decoded),()=>{});
-    clearPostActions();
+    resetScanModal();
     showResult('','พร้อมสแกน','','หันกล้องไปที่ QR ของผู้ร่วมงาน');
   }catch(e){
     showResult('bad','เปิดกล้องไม่ได้','',e&&e.message?e.message:String(e));
@@ -192,31 +200,48 @@ function setLastCheckin(r){
   };
 }
 
-function showPostActions(r,warning){
+function openScanModal(r,warning,isDuplicate){
   setLastCheckin(r);
-  const detail=(lastCheckin.department||'-')+' · '+(lastCheckin.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+lastCheckin.actualPeople+' คน';
-  $('postSummary').textContent=detail+(warning?' · '+warning:'');
-  $('postActions').classList.add('show');
-  $('editPanel').classList.remove('show');
+  $('modalStatus').textContent=isDuplicate?'⚠️ CHECK-IN แล้ว':'✅ CHECK-IN สำเร็จ';
+  $('modalStatus').className='modalStatus'+(isDuplicate?' warn':'');
+  $('modalName').textContent=lastCheckin.displayName||'—';
+  $('modalSummary').textContent=(lastCheckin.department||'-')+' · '+(lastCheckin.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+lastCheckin.actualPeople+' คน'+(warning?' · '+warning:'');
+  $('modalSummaryView').classList.remove('hidden');
+  $('modalEditView').classList.add('hidden');
+  $('scanModal').classList.add('show');
+  try{if(qr)qr.pause(true)}catch(_){}
 }
 
-function clearPostActions(){
-  $('postActions').classList.remove('show');
-  $('editPanel').classList.remove('show');
+function finishScanModal(){
+  $('scanModal').classList.remove('show');
+  $('modalEditView').classList.add('hidden');
+  $('modalSummaryView').classList.remove('hidden');
   lastCheckin=null;
+  busy=false;
+  try{if(qr)qr.resume()}catch(_){}
+  if(connected)showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป');
+}
+
+function resetScanModal(){
+  $('scanModal').classList.remove('show');
+  $('modalEditView').classList.add('hidden');
+  $('modalSummaryView').classList.remove('hidden');
+  lastCheckin=null;
+  busy=false;
 }
 
 async function openEditPanel(){
   if(!lastCheckin||!lastCheckin.registrationId)return;
   $('actualPeopleInput').value=String(Math.max(1,Math.min(20,lastCheckin.actualPeople||1)));
   $('editHint').textContent='กำลังโหลดโต๊ะ...';
-  $('editPanel').classList.add('show');
+  $('modalSummaryView').classList.add('hidden');
+  $('modalEditView').classList.remove('hidden');
   try{
     const r=await jsonp('seating',{});
     if(!r.success)throw new Error(r.error||'โหลดข้อมูลโต๊ะไม่สำเร็จ');
     seatingTables=Array.isArray(r.tables)?r.tables:[];
     buildTableOptions();
-    $('editHint').textContent='แนะนำ: ถ้าแก้เฉพาะจำนวน ให้คงโต๊ะเดิมไว้ได้ ถ้าเลือก “จัดอัตโนมัติใหม่” ระบบจะใช้โต๊ะประจำฝ่ายก่อน แล้วค่อย Overflow 24–25';
+    $('editHint').textContent='ระบบใช้โต๊ะประจำฝ่ายก่อน แล้วค่อย Overflow 24–25 ถ้าเลือกโต๊ะฝ่ายอื่นจะถือเป็น Admin Override';
   }catch(e){
     $('editHint').textContent=e.message||String(e);
   }
@@ -256,14 +281,15 @@ function buildTableOptions(){
   addGroup(type==='VIP'?'โต๊ะ VIP':'โต๊ะประจำฝ่าย '+lastCheckin.department,own);
   if(type!=='VIP'){
     addGroup('Overflow 24–25',overflow);
-    addGroup('โต๊ะฝ่ายอื่น (Override โดย Admin)',other);
+    addGroup('โต๊ะฝ่ายอื่น (Admin Override)',other);
   }
   if(current && Array.from(sel.options).some(o=>o.value===current)) sel.value=current;
   else sel.value='';
 }
 
 function closeEditPanel(){
-  $('editPanel').classList.remove('show');
+  $('modalEditView').classList.add('hidden');
+  $('modalSummaryView').classList.remove('hidden');
 }
 
 async function saveAttendanceSeating(){
@@ -280,16 +306,19 @@ async function saveAttendanceSeating(){
     });
     if(!r.success)throw new Error(r.error||'บันทึกไม่สำเร็จ');
     setLastCheckin(r);
-    showResult('good','✅ แก้ไขเรียบร้อย',r.displayName||lastCheckin.displayName,(r.department||lastCheckin.department)+' · '+(r.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+(r.actualPeople||people)+' คน');
-    $('postSummary').textContent=(r.department||lastCheckin.department)+' · '+(r.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+(r.actualPeople||people)+' คน'+(r.warning?' · '+r.warning:'');
-    $('postActions').classList.add('show');
-    $('editPanel').classList.remove('show');
+    $('modalStatus').textContent='✅ บันทึกการแก้ไขแล้ว';
+    $('modalStatus').className='modalStatus';
+    $('modalName').textContent=r.displayName||lastCheckin.displayName||'—';
+    $('modalSummary').textContent=(r.department||lastCheckin.department||'-')+' · '+(r.seatLabel||'ยังไม่กำหนดโต๊ะ')+' · '+(r.actualPeople||people)+' คน'+(r.warning?' · '+r.warning:'');
+    $('modalEditView').classList.add('hidden');
+    $('modalSummaryView').classList.remove('hidden');
+    showResult('good','✅ แก้ไขเรียบร้อย',r.displayName||'',(r.seatLabel||'')+' · '+(r.actualPeople||people)+' คน');
     beep(880,.10);
   }catch(e){
-    showResult('bad','❌ แก้ไขไม่สำเร็จ','',e.message||String(e));
+    $('editHint').textContent='❌ '+(e.message||String(e));
     beep(240,.18);
   }finally{
-    btn.disabled=false;btn.textContent='💾 บันทึกการแก้ไข';
+    btn.disabled=false;btn.textContent='💾 บันทึก';
   }
 }
 
@@ -299,37 +328,30 @@ async function submitScan(text){
   if(busy)return;
   if(text===lastText&&now-lastAt<3500)return;
   lastText=text;lastAt=now;busy=true;
-  clearPostActions();
   showResult('','กำลังตรวจสอบ...','','');
-  let keepResult=false;
   try{
     const r=await jsonp('checkin',{qr:String(text)});
     if(r.success){
       const elapsed=(((window.performance&&performance.now)?performance.now():Date.now())-perfStart)/1000;
       showResult('good','✅ CHECK-IN สำเร็จ',r.displayName||'',(r.department||'')+' · '+(r.seatLabel||'')+' · '+(r.actualPeople||r.totalPeople||1)+' คน · '+elapsed.toFixed(1)+' วิ');
-      showPostActions(r,r.seatWarning||'');
+      openScanModal(r,r.seatWarning||'',false);
       beep(880,.10);
-      keepResult=true;
-    }else if(r.duplicate){
-      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.department||'')+' · '+(r.seatLabel||'')+' · '+(r.actualPeople||r.totalPeople||1)+' คน');
-      showPostActions(r,'สามารถแก้จำนวนผู้มาจริงหรือโต๊ะได้');
-      beep(520,.13);
-      keepResult=true;
-    }else{
-      showResult('bad','❌ ไม่สำเร็จ','',r.error||'ไม่พบข้อมูล');
-      beep(240,.18);
-      if((r.error||'').includes('หมดอายุ'))setConnection(false,'การเชื่อมต่อหมดอายุ');
+      return;
     }
+    if(r.duplicate){
+      showResult('warn','⚠️ CHECK-IN แล้ว',r.displayName||'',(r.department||'')+' · '+(r.seatLabel||'')+' · '+(r.actualPeople||r.totalPeople||1)+' คน');
+      openScanModal(r,'สามารถแก้จำนวนผู้มาจริงหรือโต๊ะได้',true);
+      beep(520,.13);
+      return;
+    }
+    showResult('bad','❌ ไม่สำเร็จ','',r.error||'ไม่พบข้อมูล');
+    beep(240,.18);
+    if((r.error||'').includes('หมดอายุ'))setConnection(false,'การเชื่อมต่อหมดอายุ');
   }catch(e){
     showResult('bad','❌ เชื่อมต่อไม่สำเร็จ','',e.message||String(e));
     beep(240,.18);
-  }finally{
-    if(keepResult){
-      setTimeout(()=>{busy=false},900);
-    }else{
-      setTimeout(()=>{busy=false;if(connected)showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป')},1800);
-    }
   }
+  setTimeout(()=>{busy=false;if(connected)showResult('','พร้อมสแกน','','หันกล้องไปที่ QR คนถัดไป')},1800);
 }
 
 $('fileInput').addEventListener('change',async e=>{
