@@ -257,10 +257,11 @@ function buildTableOptions(){
 
   const own=[],overflow=[],other=[];
   seatingTables.filter(t=>String(t.type)===type).forEach(t=>{
+    const zone=String(t.zoneDepartment||'');
     const owner=String(t.ownerDepartment||'');
     if(type==='VIP') own.push(t);
-    else if(owner===lastCheckin.department) own.push(t);
-    else if(owner==='Overflow') overflow.push(t);
+    else if(t.isOverflow || zone==='Overflow') overflow.push(t);
+    else if(zone===lastCheckin.department || (!zone && owner===lastCheckin.department)) own.push(t);
     else other.push(t);
   });
 
@@ -271,8 +272,10 @@ function buildTableOptions(){
     list.forEach(t=>{
       const o=document.createElement('option');
       o.value=String(t.id);
+      const zone=String(t.zoneDepartment||'');
       const owner=String(t.ownerDepartment||'');
-      o.textContent='โต๊ะ '+t.label+' · '+(owner||'-')+' · '+Number(t.occupied||0)+'/8';
+      const zoneLabel=t.isOverflow||zone==='Overflow'?'Overflow':(zone||owner||'-');
+      o.textContent='โต๊ะ '+t.label+' · '+zoneLabel+' · '+Number(t.occupied||0)+'/8';
       g.appendChild(o);
     });
     sel.appendChild(g);
