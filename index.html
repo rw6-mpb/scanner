@@ -241,7 +241,7 @@ async function openEditPanel(){
     if(!r.success)throw new Error(r.error||'โหลดข้อมูลโต๊ะไม่สำเร็จ');
     seatingTables=Array.isArray(r.tables)?r.tables:[];
     buildTableOptions();
-    $('editHint').textContent='ระบบใช้โต๊ะประจำฝ่ายก่อน แล้วค่อย Overflow 24–25 ถ้าเลือกโต๊ะฝ่ายอื่นจะถือเป็น Admin Override';
+    $('editHint').textContent='ระบบใช้โต๊ะตามประเภทของรายชื่อก่อน · ผู้เกษียณใช้โต๊ะเกษียณ 1–3 · โต๊ะสำรองยังไม่เปิดใช้งาน';
   }catch(e){
     $('editHint').textContent=e.message||String(e);
   }
@@ -252,15 +252,15 @@ function buildTableOptions(){
   sel.innerHTML='<option value="">จัดอัตโนมัติใหม่ (ตามฝ่าย)</option>';
   if(!lastCheckin)return;
   const isVip=lastCheckin.tableIds.some(id=>String(id).indexOf('VIP')===0);
-  const type=isVip?'VIP':'GENERAL';
+  const isRetiree=lastCheckin.tableIds.some(id=>String(id).indexOf('RET')===0);
+  const type=isRetiree?'RETIREE':(isVip?'VIP':'GENERAL');
   const current=(lastCheckin.tableIds.length===1)?String(lastCheckin.tableIds[0]):'';
 
-  const own=[],overflow=[],other=[];
-  seatingTables.filter(t=>String(t.type)===type).forEach(t=>{
+  const own=[],other=[];
+  seatingTables.filter(t=>t.active!==false && String(t.type)===type).forEach(t=>{
     const zone=String(t.zoneDepartment||'');
     const owner=String(t.ownerDepartment||'');
-    if(type==='VIP') own.push(t);
-    else if(t.isOverflow || zone==='Overflow') overflow.push(t);
+    if(type==='VIP' || type==='RETIREE') own.push(t);
     else if(zone===lastCheckin.department || (!zone && owner===lastCheckin.department)) own.push(t);
     else other.push(t);
   });
@@ -274,17 +274,19 @@ function buildTableOptions(){
       o.value=String(t.id);
       const zone=String(t.zoneDepartment||'');
       const owner=String(t.ownerDepartment||'');
-      const zoneLabel=t.isOverflow||zone==='Overflow'?'Overflow':(zone||owner||'-');
-      o.textContent='โต๊ะ '+t.label+' · '+zoneLabel+' · '+Number(t.occupied||0)+'/8';
+      const zoneLabel=zone||owner||'-';
+      const prefix=(t.type==='VIP'||t.type==='RETIREE')?t.label:'โต๊ะ '+t.label;
+      o.textContent=prefix+' · '+zoneLabel+' · '+Number(t.occupied||0)+'/8';
       g.appendChild(o);
     });
     sel.appendChild(g);
   }
 
-  addGroup(type==='VIP'?'โต๊ะ VIP':'โต๊ะประจำฝ่าย '+lastCheckin.department,own);
-  if(type!=='VIP'){
-    addGroup('Overflow 24–25',overflow);
-    addGroup('โต๊ะฝ่ายอื่น (Admin Override)',other);
+  if(type==='VIP') addGroup('โต๊ะ VIP',own);
+  else if(type==='RETIREE') addGroup('โต๊ะผู้เกษียณ',own);
+  else {
+    addGroup('โต๊ะโซนฝ่าย '+lastCheckin.department,own);
+    addGroup('โต๊ะทั่วไปอื่น (Admin Override)',other);
   }
   if(current && Array.from(sel.options).some(o=>o.value===current)) sel.value=current;
   else sel.value='';
