@@ -249,7 +249,7 @@ async function openEditPanel(){
 
 function buildTableOptions(){
   const sel=$('tableSelect');
-  sel.innerHTML='<option value="">จัดอัตโนมัติใหม่ (ตามฝ่าย)</option>';
+  sel.innerHTML='<option value="">จัดอัตโนมัติใหม่</option>';
   if(!lastCheckin)return;
   const isVip=lastCheckin.tableIds.some(id=>String(id).indexOf('VIP')===0);
   const isRetiree=lastCheckin.tableIds.some(id=>String(id).indexOf('RET')===0);
